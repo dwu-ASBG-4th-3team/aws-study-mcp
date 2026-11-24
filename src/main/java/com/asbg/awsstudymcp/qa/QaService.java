@@ -45,8 +45,7 @@ public class QaService {
 		if (rating == null) {
 			throw new ApiException(ErrorCode.VALIDATION_FAILED, "rating은 UNDERSTOOD, CONFUSED, WRONG 중 하나여야 합니다.");
 		}
-		QaRecord record = repository.find(userId, qaId).orElseThrow(QaService::notFound);
-		repository.save(record.withLatestRating(rating));
+		repository.updateRating(userId, qaId, rating).orElseThrow(QaService::notFound);
 		return new RateResult(qaId, rating);
 	}
 

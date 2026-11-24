@@ -58,6 +58,17 @@ class QaServiceTest {
 	}
 
 	@Test
+	void rateAfterDeleteDoesNotRecreateRecord() {
+		var saved = service.save("user-a", "q", "a", "CLOUD_CONCEPTS", null);
+		service.delete("user-a", saved.qaId());
+
+		assertThatThrownBy(() -> service.rate("user-a", saved.qaId(), Rating.UNDERSTOOD))
+			.isInstanceOfSatisfying(ApiException.class,
+					e -> assertThat(e.code()).isEqualTo(ErrorCode.QA_NOT_FOUND));
+		assertThat(repository.find("user-a", saved.qaId())).isEmpty();
+	}
+
+	@Test
 	void deleteTwiceReturnsNotFound() {
 		var saved = service.save("user-a", "q", "a", "CLOUD_CONCEPTS", null);
 

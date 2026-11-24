@@ -23,6 +23,11 @@ public class InMemoryQaRepository implements QaRepository {
 	}
 
 	@Override
+	public Optional<QaRecord> updateRating(String userId, String qaId, QaRecord.Rating rating) {
+		return Optional.ofNullable(store.computeIfPresent(key(userId, qaId), (k, r) -> r.withLatestRating(rating)));
+	}
+
+	@Override
 	public boolean delete(String userId, String qaId) {
 		return store.remove(key(userId, qaId)) != null;
 	}
