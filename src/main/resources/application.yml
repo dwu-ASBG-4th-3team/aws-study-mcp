@@ -28,7 +28,3 @@ management:
     health:
       probes:
         enabled: true
-
-app:
-  auth:
-    dev-user-id: local-dev-user

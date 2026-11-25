@@ -1,0 +1,3 @@
+app:
+  auth:
+    dev-user-id: local-dev-user
