@@ -8,10 +8,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.asbg.awsstudymcp.common.ApiException;
-import com.asbg.awsstudymcp.common.ErrorCode;
+import com.asbg.awsstudymcp.common.CommonErrorCode;
 import com.asbg.awsstudymcp.common.Ulid;
 import com.asbg.awsstudymcp.qa.QaRecord.EmbeddingStatus;
 import com.asbg.awsstudymcp.qa.QaRecord.Rating;
+import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
 
 @Service
 public class QaService {
@@ -43,7 +44,7 @@ public class QaService {
 	public RateResult rate(String userId, String qaId, Rating rating) {
 		requireText(qaId, "qaId");
 		if (rating == null) {
-			throw new ApiException(ErrorCode.VALIDATION_FAILED, "rating은 UNDERSTOOD, CONFUSED, WRONG 중 하나여야 합니다.");
+			throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "rating은 UNDERSTOOD, CONFUSED, WRONG 중 하나여야 합니다.");
 		}
 		repository.updateRating(userId, qaId, rating).orElseThrow(QaService::notFound);
 		return new RateResult(qaId, rating);
@@ -59,13 +60,13 @@ public class QaService {
 
 	private static void requireText(String value, String field) {
 		if (value == null || value.isBlank()) {
-			throw new ApiException(ErrorCode.VALIDATION_FAILED, field + "은(는) 비어 있을 수 없습니다.");
+			throw new ApiException(CommonErrorCode.VALIDATION_FAILED, field + "은(는) 비어 있을 수 없습니다.");
 		}
 	}
 
 	// 다른 사용자의 qaId인지 드러나지 않도록 404로 통일
 	private static ApiException notFound() {
-		return new ApiException(ErrorCode.QA_NOT_FOUND, "해당 Q&A가 없습니다.");
+		return new ApiException(QaErrorCode.QA_NOT_FOUND);
 	}
 
 	public record SaveResult(String qaId, EmbeddingStatus embeddingStatus, Instant createdAt) {

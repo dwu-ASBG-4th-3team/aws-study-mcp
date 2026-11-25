@@ -8,7 +8,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import com.asbg.awsstudymcp.common.ApiException;
-import com.asbg.awsstudymcp.common.ErrorCode;
+import com.asbg.awsstudymcp.common.CommonErrorCode;
+import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
 import com.asbg.awsstudymcp.qa.QaRecord.EmbeddingStatus;
 import com.asbg.awsstudymcp.qa.QaRecord.Rating;
 
@@ -30,7 +31,7 @@ class QaServiceTest {
 	void saveRejectsBlankQuestion() {
 		assertThatThrownBy(() -> service.save("user-a", " ", "a", "CLOUD_CONCEPTS", null))
 			.isInstanceOfSatisfying(ApiException.class,
-					e -> assertThat(e.code()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+					e -> assertThat(e.code()).isEqualTo(CommonErrorCode.VALIDATION_FAILED));
 	}
 
 	@Test
@@ -50,10 +51,10 @@ class QaServiceTest {
 
 		assertThatThrownBy(() -> service.rate("user-b", saved.qaId(), Rating.UNDERSTOOD))
 			.isInstanceOfSatisfying(ApiException.class,
-					e -> assertThat(e.code()).isEqualTo(ErrorCode.QA_NOT_FOUND));
+					e -> assertThat(e.code()).isEqualTo(QaErrorCode.QA_NOT_FOUND));
 		assertThatThrownBy(() -> service.delete("user-b", saved.qaId()))
 			.isInstanceOfSatisfying(ApiException.class,
-					e -> assertThat(e.code()).isEqualTo(ErrorCode.QA_NOT_FOUND));
+					e -> assertThat(e.code()).isEqualTo(QaErrorCode.QA_NOT_FOUND));
 		assertThat(repository.find("user-a", saved.qaId())).isPresent();
 	}
 
@@ -64,7 +65,7 @@ class QaServiceTest {
 
 		assertThatThrownBy(() -> service.rate("user-a", saved.qaId(), Rating.UNDERSTOOD))
 			.isInstanceOfSatisfying(ApiException.class,
-					e -> assertThat(e.code()).isEqualTo(ErrorCode.QA_NOT_FOUND));
+					e -> assertThat(e.code()).isEqualTo(QaErrorCode.QA_NOT_FOUND));
 		assertThat(repository.find("user-a", saved.qaId())).isEmpty();
 	}
 
@@ -75,7 +76,7 @@ class QaServiceTest {
 		assertThat(service.delete("user-a", saved.qaId()).deleted()).isTrue();
 		assertThatThrownBy(() -> service.delete("user-a", saved.qaId()))
 			.isInstanceOfSatisfying(ApiException.class,
-					e -> assertThat(e.code()).isEqualTo(ErrorCode.QA_NOT_FOUND));
+					e -> assertThat(e.code()).isEqualTo(QaErrorCode.QA_NOT_FOUND));
 	}
 
 }
