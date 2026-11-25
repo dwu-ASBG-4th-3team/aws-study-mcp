@@ -18,6 +18,8 @@ import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
 @Service
 public class QaService {
 
+	static final int MAX_QUESTION_LENGTH = 2_000;
+	static final int MAX_ANSWER_LENGTH = 20_000;
 	static final int MAX_TAGS = 10;
 	static final int MAX_TAG_LENGTH = 50;
 
@@ -35,10 +37,10 @@ public class QaService {
 	}
 
 	public SaveResult save(String userId, String question, String answer, Domain domain, List<String> tags) {
-		requireText(question, "question");
-		requireText(answer, "answer");
+		String q = requireText(question, "question", MAX_QUESTION_LENGTH);
+		String a = requireText(answer, "answer", MAX_ANSWER_LENGTH);
 
-		QaRecord record = new QaRecord(userId, Ulid.next(), question.strip(), answer.strip(),
+		QaRecord record = new QaRecord(userId, Ulid.next(), q, a,
 				domain == null ? Domain.UNCLASSIFIED : domain,
 				validateTags(tags), EmbeddingStatus.PENDING, null, Instant.now(clock));
 		repository.save(record);
@@ -87,6 +89,15 @@ public class QaService {
 		if (value == null || value.isBlank()) {
 			throw new ApiException(CommonErrorCode.VALIDATION_FAILED, field + "은(는) 비어 있을 수 없습니다.");
 		}
+	}
+
+	private static String requireText(String value, String field, int maxLength) {
+		requireText(value, field);
+		String stripped = value.strip();
+		if (stripped.length() > maxLength) {
+			throw new ApiException(CommonErrorCode.VALIDATION_FAILED, field + "은(는) " + maxLength + "자 이하여야 합니다.");
+		}
+		return stripped;
 	}
 
 	// 다른 사용자의 qaId인지 드러나지 않도록 404로 통일

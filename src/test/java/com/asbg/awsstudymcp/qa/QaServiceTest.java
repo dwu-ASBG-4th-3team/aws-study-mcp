@@ -74,6 +74,16 @@ class QaServiceTest {
 	}
 
 	@Test
+	void saveAcceptsMaxLengthAndRejectsLonger() {
+		var maxQuestion = "q".repeat(QaService.MAX_QUESTION_LENGTH);
+		var maxAnswer = "a".repeat(QaService.MAX_ANSWER_LENGTH);
+
+		assertThat(service.save("user-a", maxQuestion, maxAnswer, Domain.TECH, null).qaId()).isNotNull();
+		assertValidationFailed(() -> service.save("user-a", maxQuestion + "q", "a", Domain.TECH, null));
+		assertValidationFailed(() -> service.save("user-a", "q", maxAnswer + "a", Domain.TECH, null));
+	}
+
+	@Test
 	void saveRejectsBlankQuestion() {
 		assertThatThrownBy(() -> service.save("user-a", " ", "a", Domain.CONCEPTS, null))
 			.isInstanceOfSatisfying(ApiException.class,
