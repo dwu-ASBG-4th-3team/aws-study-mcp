@@ -2,6 +2,7 @@ package com.asbg.awsstudymcp.qa;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,9 @@ import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
 
 @Service
 public class QaService {
+
+	static final int MAX_TAGS = 10;
+	static final int MAX_TAG_LENGTH = 50;
 
 	private final QaRepository repository;
 	private final Clock clock;
@@ -36,7 +40,7 @@ public class QaService {
 
 		QaRecord record = new QaRecord(userId, Ulid.next(), question.strip(), answer.strip(),
 				domain == null ? Domain.UNCLASSIFIED : domain,
-				tags == null ? List.of() : List.copyOf(tags), EmbeddingStatus.PENDING, null, Instant.now(clock));
+				validateTags(tags), EmbeddingStatus.PENDING, null, Instant.now(clock));
 		repository.save(record);
 		return new SaveResult(record.qaId(), record.embeddingStatus(), record.createdAt());
 	}
@@ -56,6 +60,27 @@ public class QaService {
 			throw notFound();
 		}
 		return new DeleteResult(qaId, true);
+	}
+
+	private static List<String> validateTags(List<String> tags) {
+		if (tags == null) {
+			return List.of();
+		}
+		if (tags.size() > MAX_TAGS) {
+			throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "tags는 최대 " + MAX_TAGS + "개까지 입력할 수 있습니다.");
+		}
+		List<String> result = new ArrayList<>(tags.size());
+		for (String tag : tags) {
+			if (tag == null || tag.isBlank()) {
+				throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "tags에 빈 값이 있습니다.");
+			}
+			String stripped = tag.strip();
+			if (stripped.length() > MAX_TAG_LENGTH) {
+				throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "태그는 " + MAX_TAG_LENGTH + "자 이하여야 합니다.");
+			}
+			result.add(stripped);
+		}
+		return List.copyOf(result);
 	}
 
 	private static void requireText(String value, String field) {

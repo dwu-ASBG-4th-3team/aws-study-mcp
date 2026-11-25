@@ -3,8 +3,11 @@ package com.asbg.awsstudymcp.qa;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 
 import com.asbg.awsstudymcp.common.ApiException;
@@ -34,6 +37,40 @@ class QaServiceTest {
 		assertThat(repository.find("user-a", saved.qaId())).get()
 			.extracting(QaRecord::domain)
 			.isEqualTo(Domain.UNCLASSIFIED);
+	}
+
+	@Test
+	void saveStripsTags() {
+		var saved = service.save("user-a", "q", "a", Domain.SECURITY, List.of("  iam role ", "sts"));
+
+		assertThat(repository.find("user-a", saved.qaId())).get()
+			.extracting(QaRecord::tags)
+			.isEqualTo(List.of("iam role", "sts"));
+	}
+
+	@Test
+	void saveRejectsNullOrBlankTag() {
+		var withNull = new ArrayList<String>();
+		withNull.add("iam");
+		withNull.add(null);
+
+		assertValidationFailed(() -> service.save("user-a", "q", "a", Domain.SECURITY, withNull));
+		assertValidationFailed(() -> service.save("user-a", "q", "a", Domain.SECURITY, List.of("iam", "  ")));
+	}
+
+	@Test
+	void saveRejectsTooManyOrTooLongTags() {
+		var tooMany = Collections.nCopies(QaService.MAX_TAGS + 1, "tag");
+		var tooLong = "a".repeat(QaService.MAX_TAG_LENGTH + 1);
+
+		assertValidationFailed(() -> service.save("user-a", "q", "a", Domain.SECURITY, tooMany));
+		assertValidationFailed(() -> service.save("user-a", "q", "a", Domain.SECURITY, List.of(tooLong)));
+	}
+
+	private static void assertValidationFailed(ThrowingCallable call) {
+		assertThatThrownBy(call)
+			.isInstanceOfSatisfying(ApiException.class,
+					e -> assertThat(e.code()).isEqualTo(CommonErrorCode.VALIDATION_FAILED));
 	}
 
 	@Test
