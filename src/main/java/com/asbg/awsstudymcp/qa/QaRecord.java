@@ -8,7 +8,7 @@ public record QaRecord(
 		String qaId,
 		String question,
 		String answer,
-		String domain,
+		Domain domain,
 		List<String> tags,
 		EmbeddingStatus embeddingStatus,
 		Rating latestRating,

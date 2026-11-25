@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import com.asbg.awsstudymcp.auth.CurrentUserProvider;
 import com.asbg.awsstudymcp.common.ApiException;
+import com.asbg.awsstudymcp.qa.Domain;
 import com.asbg.awsstudymcp.qa.QaRecord.Rating;
 import com.asbg.awsstudymcp.qa.QaService;
 
@@ -31,11 +32,15 @@ public class QaTools {
 	@McpTool(name = "save_qa", description = """
 			AWS 학습 중 나눈 질문과 답변을 사용자의 학습 노트에 저장한다.
 			AWS 자격증(CLF) 관련 질문에 답한 직후, 사용자가 원하면 호출한다.
-			저장 결과로 qaId를 돌려주며, 이후 rate_answer와 delete_qa에 이 qaId를 쓴다.""")
+			저장 결과로 qaId를 돌려주며, 이후 rate_answer와 delete_qa에 이 qaId를 쓴다.
+			domain은 가능하면 반드시 분류하고, 어느 영역인지 정말 판단하기 어려울 때만 생략한다.""")
 	public CallToolResult saveQa(
 			@McpToolParam(description = "사용자가 한 질문 원문") String question,
 			@McpToolParam(description = "질문에 대한 답변 원문") String answer,
-			@McpToolParam(description = "CLF 시험 도메인 (예: CLOUD_CONCEPTS, SECURITY_COMPLIANCE, CLOUD_TECHNOLOGY_SERVICES, BILLING_PRICING_SUPPORT)") String domain,
+			@McpToolParam(description = """
+					CLF 시험 도메인. CONCEPTS(클라우드 개념), SECURITY(보안·규정 준수), \
+					TECH(클라우드 기술·서비스), BILLING(요금·결제·지원), UNCLASSIFIED(분류 불가). \
+					생략하면 UNCLASSIFIED로 저장된다.""", required = false) Domain domain,
 			@McpToolParam(description = "세부 주제 태그 (예: [\"iam\", \"vpc\"])", required = false) List<String> tags) {
 		return call(() -> qaService.save(currentUser.currentUserId(), question, answer, domain, tags));
 	}

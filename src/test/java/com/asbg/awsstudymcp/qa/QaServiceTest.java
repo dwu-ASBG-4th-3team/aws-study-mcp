@@ -20,7 +20,7 @@ class QaServiceTest {
 
 	@Test
 	void saveStoresRecordAsPending() {
-		var result = service.save("user-a", "ALB와 NLB 차이?", "L7 vs L4", "CLOUD_TECHNOLOGY_SERVICES", List.of("elb"));
+		var result = service.save("user-a", "ALB와 NLB 차이?", "L7 vs L4", Domain.TECH, List.of("elb"));
 
 		assertThat(result.qaId()).hasSize(26);
 		assertThat(result.embeddingStatus()).isEqualTo(EmbeddingStatus.PENDING);
@@ -28,15 +28,24 @@ class QaServiceTest {
 	}
 
 	@Test
+	void saveWithoutDomainIsUnclassified() {
+		var saved = service.save("user-a", "q", "a", null, null);
+
+		assertThat(repository.find("user-a", saved.qaId())).get()
+			.extracting(QaRecord::domain)
+			.isEqualTo(Domain.UNCLASSIFIED);
+	}
+
+	@Test
 	void saveRejectsBlankQuestion() {
-		assertThatThrownBy(() -> service.save("user-a", " ", "a", "CLOUD_CONCEPTS", null))
+		assertThatThrownBy(() -> service.save("user-a", " ", "a", Domain.CONCEPTS, null))
 			.isInstanceOfSatisfying(ApiException.class,
 					e -> assertThat(e.code()).isEqualTo(CommonErrorCode.VALIDATION_FAILED));
 	}
 
 	@Test
 	void rateUpdatesLatestRating() {
-		var saved = service.save("user-a", "q", "a", "CLOUD_CONCEPTS", null);
+		var saved = service.save("user-a", "q", "a", Domain.CONCEPTS, null);
 
 		service.rate("user-a", saved.qaId(), Rating.CONFUSED);
 
@@ -47,7 +56,7 @@ class QaServiceTest {
 
 	@Test
 	void otherUsersRecordIsNotFound() {
-		var saved = service.save("user-a", "q", "a", "CLOUD_CONCEPTS", null);
+		var saved = service.save("user-a", "q", "a", Domain.CONCEPTS, null);
 
 		assertThatThrownBy(() -> service.rate("user-b", saved.qaId(), Rating.UNDERSTOOD))
 			.isInstanceOfSatisfying(ApiException.class,
@@ -60,7 +69,7 @@ class QaServiceTest {
 
 	@Test
 	void rateAfterDeleteDoesNotRecreateRecord() {
-		var saved = service.save("user-a", "q", "a", "CLOUD_CONCEPTS", null);
+		var saved = service.save("user-a", "q", "a", Domain.CONCEPTS, null);
 		service.delete("user-a", saved.qaId());
 
 		assertThatThrownBy(() -> service.rate("user-a", saved.qaId(), Rating.UNDERSTOOD))
@@ -71,7 +80,7 @@ class QaServiceTest {
 
 	@Test
 	void deleteTwiceReturnsNotFound() {
-		var saved = service.save("user-a", "q", "a", "CLOUD_CONCEPTS", null);
+		var saved = service.save("user-a", "q", "a", Domain.CONCEPTS, null);
 
 		assertThat(service.delete("user-a", saved.qaId()).deleted()).isTrue();
 		assertThatThrownBy(() -> service.delete("user-a", saved.qaId()))

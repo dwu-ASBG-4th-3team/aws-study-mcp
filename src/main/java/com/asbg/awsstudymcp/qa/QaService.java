@@ -30,12 +30,12 @@ public class QaService {
 		this.clock = clock;
 	}
 
-	public SaveResult save(String userId, String question, String answer, String domain, List<String> tags) {
+	public SaveResult save(String userId, String question, String answer, Domain domain, List<String> tags) {
 		requireText(question, "question");
 		requireText(answer, "answer");
-		requireText(domain, "domain");
 
-		QaRecord record = new QaRecord(userId, Ulid.next(), question.strip(), answer.strip(), domain.strip(),
+		QaRecord record = new QaRecord(userId, Ulid.next(), question.strip(), answer.strip(),
+				domain == null ? Domain.UNCLASSIFIED : domain,
 				tags == null ? List.of() : List.copyOf(tags), EmbeddingStatus.PENDING, null, Instant.now(clock));
 		repository.save(record);
 		return new SaveResult(record.qaId(), record.embeddingStatus(), record.createdAt());
