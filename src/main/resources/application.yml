@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: aws-study-mcp
+  ai:
+    mcp:
+      server:
+        name: aws-study-mcp
+        version: 0.0.1
+        type: SYNC
+        # 세션을 두지 않아야 CloudFront 제한시간, 태스크 재시작, 스케일 아웃에 안전
+        protocol: STATELESS
+        instructions: >
+          AWS CLF 학습 Q&A 노트입니다. 사용자가 AWS 개념을 질문하고 답을 받으면
+          save_qa로 기록할지 물어보세요. 기록한 Q&A의 이해도는 rate_answer로 남깁니다.
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+# ALB 헬스체크: GET /api/health
+management:
+  endpoints:
+    web:
+      base-path: /api
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
