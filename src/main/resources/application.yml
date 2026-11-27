@@ -23,6 +23,16 @@ server:
   port: ${PORT:8080}
   shutdown: graceful
 
+# API 문서는 local 프로필에서만 켠다. (application-local.yml)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+  paths-to-match: /api/**
+  # 전역 예외 처리의 응답이 모든 API에 임의로 붙지 않게 한다.
+  override-with-generic-response: false
+
 # ALB 헬스체크: GET /api/health
 management:
   endpoints:

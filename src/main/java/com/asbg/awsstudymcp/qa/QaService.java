@@ -5,18 +5,28 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.asbg.awsstudymcp.qa.dto.res.FeedbackRes;
+import com.asbg.awsstudymcp.qa.dto.res.QaDetailRes;
+import com.asbg.awsstudymcp.qa.dto.res.QaSummary;
+import com.asbg.awsstudymcp.qa.dto.res.SimilarQuestion;
 import com.asbg.awsstudymcp.qa.enums.Domain;
 import com.asbg.awsstudymcp.qa.enums.EmbeddingStatus;
 import com.asbg.awsstudymcp.qa.enums.Rating;
 import com.asbg.awsstudymcp.qa.enums.Source;
 import com.asbg.awsstudymcp.qa.enums.Verification;
 import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.asbg.awsstudymcp.common.ApiException;
 import com.asbg.awsstudymcp.common.CommonErrorCode;
+import com.asbg.awsstudymcp.common.Timestamps;
 import com.asbg.awsstudymcp.common.Ulid;
+import com.asbg.awsstudymcp.common.pagination.CursorCodec;
+import com.asbg.awsstudymcp.common.pagination.CursorPageRes;
+import com.asbg.awsstudymcp.common.pagination.PageLimit;
 
 @Service
 public class QaService {
@@ -25,17 +35,24 @@ public class QaService {
 	static final int MAX_ANSWER_LENGTH = 20_000;
 	static final int MAX_TAGS = 10;
 	static final int MAX_TAG_LENGTH = 50;
+	static final int MAX_SIMILAR_QUESTIONS = 3;
+	// 서버가 만드는 qaId는 26자다. 너무 긴 값은 DynamoDB 키 한도를 넘기 전에 걸러낸다.
+	private static final int MAX_QA_ID_LENGTH = 100;
+
+	private static final Logger log = LoggerFactory.getLogger(QaService.class);
 
 	private final QaRepository repository;
+	private final SimilarQuestionFinder similarQuestionFinder;
 	private final Clock clock;
 
 	@Autowired
-	public QaService(QaRepository repository) {
-		this(repository, Clock.systemUTC());
+	public QaService(QaRepository repository, SimilarQuestionFinder similarQuestionFinder) {
+		this(repository, similarQuestionFinder, Clock.systemUTC());
 	}
 
-	QaService(QaRepository repository, Clock clock) {
+	QaService(QaRepository repository, SimilarQuestionFinder similarQuestionFinder, Clock clock) {
 		this.repository = repository;
+		this.similarQuestionFinder = similarQuestionFinder;
 		this.clock = clock;
 	}
 
@@ -57,21 +74,67 @@ public class QaService {
 		return new SaveResult(record.getQaId(), record.getEmbeddingStatus(), record.getCreatedAt());
 	}
 
-	public RateResult rate(String userId, String qaId, Rating rating) {
-		requireText(qaId, "qaId");
+	public CursorPageRes<QaSummary> list(String userId, Domain domain, Integer limit, String cursor) {
+		int size = PageLimit.resolve(limit);
+		// domain이 다른 목록의 커서는 받지 않는다.
+		String scope = "qa:" + (domain == null ? "ALL" : domain.name());
+		QaRepository.Position after = cursor == null ? null : decodePosition(userId, scope, cursor);
+		QaRepository.Page page = repository.findPage(userId, domain, after, size);
+		String nextCursor = page.next() == null ? null
+				: CursorCodec.encode(userId, scope, List.of(page.next().qaId(), page.next().createdAt()));
+		return new CursorPageRes<>(page.items().stream().map(QaSummary::from).toList(), nextCursor);
+	}
+
+	public QaDetailRes get(String userId, String qaId) {
+		requireQaId(qaId);
+		QaItem record = repository.find(userId, qaId).orElseThrow(QaService::notFound);
+		return QaDetailRes.from(record, similarQuestions(userId, record));
+	}
+
+	// REST와 MCP rate_answer가 함께 쓴다.
+	public FeedbackRes rate(String userId, String qaId, Rating rating) {
+		requireQaId(qaId);
 		if (rating == null) {
 			throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "rating은 UNDERSTOOD, CONFUSED, WRONG 중 하나여야 합니다.");
 		}
-		repository.updateRating(userId, qaId, rating, Instant.now(clock)).orElseThrow(QaService::notFound);
-		return new RateResult(qaId, rating);
+		QaItem record = repository.updateRating(userId, qaId, rating, Instant.now(clock))
+			.orElseThrow(QaService::notFound);
+		return new FeedbackRes(qaId, record.getLatestFeedback(), Timestamps.format(record.getUpdatedAt()));
 	}
 
 	public DeleteResult delete(String userId, String qaId) {
-		requireText(qaId, "qaId");
+		requireQaId(qaId);
 		if (!repository.delete(userId, qaId)) {
 			throw notFound();
 		}
 		return new DeleteResult(qaId, true);
+	}
+
+	private static QaRepository.Position decodePosition(String userId, String scope, String cursor) {
+		List<String> values = CursorCodec.decode(userId, scope, cursor, 2);
+		return new QaRepository.Position(values.get(0), values.get(1));
+	}
+
+	// 부가 정보라서 검색이 실패해도 상세 조회는 성공시킨다.
+	private List<SimilarQuestion> similarQuestions(String userId, QaItem record) {
+		try {
+			return similarQuestionFinder.find(userId, record.getQuestion())
+				.stream()
+				.filter(similar -> !similar.qaId().equals(record.getQaId()))
+				.limit(MAX_SIMILAR_QUESTIONS)
+				.toList();
+		}
+		catch (RuntimeException e) {
+			log.warn("비슷한 질문 검색 실패: qaId={}", record.getQaId(), e);
+			return List.of();
+		}
+	}
+
+	private static void requireQaId(String qaId) {
+		requireText(qaId, "qaId");
+		if (qaId.length() > MAX_QA_ID_LENGTH) {
+			throw notFound();
+		}
 	}
 
 	private static List<String> validateTags(List<String> tags) {
@@ -116,9 +179,6 @@ public class QaService {
 	}
 
 	public record SaveResult(String qaId, EmbeddingStatus embeddingStatus, Instant createdAt) {
-	}
-
-	public record RateResult(String qaId, Rating rating) {
 	}
 
 	public record DeleteResult(String qaId, boolean deleted) {

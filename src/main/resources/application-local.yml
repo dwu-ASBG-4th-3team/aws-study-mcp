@@ -4,3 +4,9 @@ app:
   dynamodb:
     table-name: ${DYNAMODB_TABLE_NAME:clf-note-local}
     region: ${AWS_REGION:ap-northeast-2}
+# Swagger UI: http://localhost:8080/swagger-ui.html
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

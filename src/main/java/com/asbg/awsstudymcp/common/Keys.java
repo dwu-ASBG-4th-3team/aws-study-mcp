@@ -13,6 +13,7 @@ public final class Keys {
 	public static final String GSI1 = "GSI1";
 	public static final String GSI1PK = "GSI1PK";
 	public static final String GSI1SK = "GSI1SK";
+	public static final String QA_PREFIX = "QA#";
 
 	private Keys() {
 	}
@@ -23,7 +24,12 @@ public final class Keys {
 	}
 
 	public static String qaSk(String qaId) {
-		return "QA#" + require(qaId, "qaId");
+		return QA_PREFIX + require(qaId, "qaId");
+	}
+
+	// 평가 시각까지 넣어 이력이 쌓이게 한다.
+	public static String feedbackSk(String qaId, Instant createdAt) {
+		return "FB#" + require(qaId, "qaId") + "#" + Timestamps.format(createdAt);
 	}
 
 	public static String idempotencySk(String key) {

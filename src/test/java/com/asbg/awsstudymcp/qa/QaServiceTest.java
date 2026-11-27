@@ -33,14 +33,15 @@ class QaServiceTest {
 	private static DynamoDbTable<QaItem> table;
 	private static DynamoDbQaRepository repository;
 
-	private final QaService service = new QaService(repository);
+	private final QaService service = new QaService(repository, (userId, question) -> List.of());
 
 	@BeforeAll
 	static void startDynamoDb() {
-		var client = DynamoDbEnhancedClient.builder().dynamoDbClient(LocalDynamoDb.client()).build();
+		var dynamoDb = LocalDynamoDb.client();
+		var client = DynamoDbEnhancedClient.builder().dynamoDbClient(dynamoDb).build();
 		table = client.table("qa-service-test", TableSchema.fromBean(QaItem.class));
 		LocalDynamoDb.createTable(table);
-		repository = new DynamoDbQaRepository(table);
+		repository = new DynamoDbQaRepository(client, dynamoDb, table);
 	}
 
 	@Test
