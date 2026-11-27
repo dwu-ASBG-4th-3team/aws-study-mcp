@@ -15,7 +15,7 @@ import jakarta.validation.constraints.Positive;
  * @param apiKey GEMINI_API_KEY
  * @param model 모델 ID. 바꾸면 전체 재임베딩이 필요하다.
  * @param dimension 출력 차원. S3 Vectors 인덱스 차원과 같아야 한다.
- * @param timeout 호출 한 번의 제한시간
+ * @param timeout 호출 한 번 전체의 제한시간 (시간 초과는 재시도 가능 오류)
  */
 @Validated
 @ConfigurationProperties("app.gemini.embedding")

@@ -11,7 +11,7 @@ import com.google.genai.Client;
 
 /**
  * 실제 Gemini API를 호출한다. GEMINI_API_KEY가 있을 때만 실행되고 CI에서는 건너뛴다.
- * <pre>GEMINI_API_KEY=... ./gradlew test --tests '*GeminiEmbeddingLiveTest'</pre>
+ * <pre>GEMINI_API_KEY=... ./gradlew test --rerun --tests '*GeminiEmbeddingLiveTest'</pre>
  */
 @EnabledIfEnvironmentVariable(named = "GEMINI_API_KEY", matches = ".+")
 class GeminiEmbeddingLiveTest {

@@ -9,6 +9,7 @@
 | 모델 | `gemini-embedding-2` | `GEMINI_EMBEDDING_MODEL` |
 | 출력 차원 | 768 (S3 Vectors 인덱스 `qa-index-gemini-v1`과 같아야 함) | `GEMINI_EMBEDDING_DIM` |
 | API Key | Secrets Manager에서 태스크 환경변수로 주입 | `GEMINI_API_KEY` |
+| 제한시간 | 호출 전체 10초 (시간 초과는 재시도 가능 오류) | `app.gemini.embedding.timeout` |
 | 거리 | cosine (정규화는 모델이 처리) | - |
 
 `GEMINI_API_KEY`가 비어 있으면 `EmbeddingProvider` 빈을 만들지 않습니다. 키 없이도 로컬 실행과 CI는 동작합니다.
@@ -27,12 +28,12 @@ gemini-embedding-2는 `task_type` 파라미터가 없어서 접두어로 용도�
 - 한 요청에 텍스트를 여러 개 넣으면 임베딩 하나로 합쳐집니다. 일괄 인덱싱도 QA마다 1건씩 호출합니다.
 - 모델이나 차원을 바꾸면 기존 벡터와 호환되지 않아 전체 재임베딩이 필요합니다. QA에 `embeddingModel`을 함께 기록합니다.
 - SDK 자체 재시도는 끕니다. `EmbeddingException.isRetryable()`이 true(429, 408, 5xx, 네트워크 오류)면 호출하는 쪽에서 재시도합니다. 인덱싱은 SQS 재처리, 검색 API는 `RETRY_LATER`로 응답합니다.
-- ECS·Lambda에서 Gemini API(외부 HTTPS)를 호출하려면 NAT Gateway가 필요합니다.
+- Gemini API는 외부 HTTPS라서 ECS·Lambda에서 인터넷으로 나가는 경로가 있어야 합니다. 프라이빗 서브넷(IPv4)이면 NAT Gateway가 필요하고, VPC에 붙이지 않은 Lambda나 퍼블릭 IP를 가진 퍼블릭 서브넷의 Fargate는 NAT 없이 나갈 수 있습니다. 우리 구성(Internal ALB 뒤 ECS)이 프라이빗 서브넷이면 NAT Gateway가 필요합니다.
 
 ## 실제 호출 확인
 
 ```sh
-GEMINI_API_KEY=... ./gradlew test --tests '*GeminiEmbeddingLiveTest'
+GEMINI_API_KEY=... ./gradlew test --rerun --tests '*GeminiEmbeddingLiveTest'
 ```
 
-키가 없으면 이 테스트는 건너뜁니다.
+키가 없으면 이 테스트는 건너뜁니다. Gradle은 환경변수 변경을 감지하지 못하므로 `--rerun`을 붙여야 키를 넣은 뒤에도 다시 실행됩니다.

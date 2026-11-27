@@ -22,6 +22,7 @@ public class GeminiEmbeddingConfig {
 	@Bean
 	Client geminiClient(GeminiEmbeddingProperties properties) {
 		HttpOptions httpOptions = HttpOptions.builder()
+			// 연결·읽기·쓰기 각각의 제한시간. 호출 전체 제한시간은 TimeoutEmbedApi가 건다.
 			.timeout((int) properties.timeout().toMillis())
 			// 재시도는 호출하는 쪽(SQS 재처리, 검색 API의 RETRY_LATER)에서 정한다.
 			.retryOptions(HttpRetryOptions.builder().attempts(1).build())
@@ -31,8 +32,8 @@ public class GeminiEmbeddingConfig {
 
 	@Bean
 	EmbeddingProvider embeddingProvider(Client geminiClient, GeminiEmbeddingProperties properties) {
-		return new GeminiEmbeddingProvider(geminiClient.models::embedContent, properties.model(),
-				properties.dimension());
+		var api = new TimeoutEmbedApi(geminiClient.async.models::embedContent, properties.timeout());
+		return new GeminiEmbeddingProvider(api, properties.model(), properties.dimension());
 	}
 
 }
