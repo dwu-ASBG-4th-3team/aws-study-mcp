@@ -56,6 +56,15 @@ class SearchQueryTest {
 	}
 
 	@Test
+	void 답변_미리보기는_이모지를_반으로_자르지_않는다() {
+		String preview = SearchHit.preview("가".repeat(299) + "😀" + "나머지");
+
+		assertThat(preview).endsWith("😀");
+		assertThat(preview.codePointCount(0, preview.length())).isEqualTo(300);
+		assertThat(SearchHit.preview("😀".repeat(300))).isEqualTo("😀".repeat(300));
+	}
+
+	@Test
 	void 결과_목록은_null이면_빈_목록() {
 		assertThat(new SearchResult(null).results()).isEmpty();
 		assertThat(new SearchHit("id", "q", "a", Domain.TECH, null, null, null, null).tags()).isEqualTo(List.of());
