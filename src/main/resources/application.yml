@@ -18,6 +18,12 @@ app:
     # 값이 없으면 기동에 실패한다.
     table-name: ${DYNAMODB_TABLE_NAME:}
     region: ${AWS_REGION:}
+  gemini:
+    embedding:
+      # 키가 없으면 임베딩 빈을 만들지 않는다 (GeminiEmbeddingConfig).
+      api-key: ${GEMINI_API_KEY:}
+      model: ${GEMINI_EMBEDDING_MODEL:gemini-embedding-2}
+      dimension: ${GEMINI_EMBEDDING_DIM:768}
 
 server:
   port: ${PORT:8080}
