@@ -3,21 +3,27 @@ package com.asbg.awsstudymcp.mcp;
 import java.util.List;
 import java.util.function.Supplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.mcp.annotation.McpTool;
 import org.springframework.ai.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
 
+import com.asbg.awsstudymcp.qa.enums.Domain;
+import com.asbg.awsstudymcp.qa.enums.Rating;
 import com.asbg.awsstudymcp.auth.CurrentUserProvider;
 import com.asbg.awsstudymcp.common.ApiException;
-import com.asbg.awsstudymcp.qa.Domain;
-import com.asbg.awsstudymcp.qa.QaRecord.Rating;
+import com.asbg.awsstudymcp.common.CommonErrorCode;
 import com.asbg.awsstudymcp.qa.QaService;
 
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import software.amazon.awssdk.core.exception.SdkException;
 import tools.jackson.databind.json.JsonMapper;
 
 @Component
 public class QaTools {
+
+	private static final Logger log = LoggerFactory.getLogger(QaTools.class);
 
 	private final QaService qaService;
 	private final CurrentUserProvider currentUser;
@@ -65,8 +71,17 @@ public class QaTools {
 			return CallToolResult.builder().addTextContent(jsonMapper.writeValueAsString(action.get())).build();
 		}
 		catch (ApiException e) {
-			return CallToolResult.builder().isError(true).addTextContent(e.toToolMessage()).build();
+			return error(e);
 		}
+		// AWS 오류 원문에는 계정 ID, 테이블 이름 등이 들어가므로 로그에만 남긴다.
+		catch (SdkException e) {
+			log.error("AWS 호출 실패", e);
+			return error(new ApiException(CommonErrorCode.INTERNAL_ERROR));
+		}
+	}
+
+	private static CallToolResult error(ApiException e) {
+		return CallToolResult.builder().isError(true).addTextContent(e.toToolMessage()).build();
 	}
 
 }

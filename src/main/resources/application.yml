@@ -13,6 +13,12 @@ spring:
           AWS CLF 학습 Q&A 노트입니다. 사용자가 AWS 개념을 질문하고 답을 받으면
           save_qa로 기록할지 물어보세요. 기록한 Q&A의 이해도는 rate_answer로 남깁니다.
 
+app:
+  dynamodb:
+    # 값이 없으면 기동에 실패한다.
+    table-name: ${DYNAMODB_TABLE_NAME:}
+    region: ${AWS_REGION:}
+
 server:
   port: ${PORT:8080}
   shutdown: graceful

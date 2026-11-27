@@ -5,15 +5,18 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.asbg.awsstudymcp.qa.enums.Domain;
+import com.asbg.awsstudymcp.qa.enums.EmbeddingStatus;
+import com.asbg.awsstudymcp.qa.enums.Rating;
+import com.asbg.awsstudymcp.qa.enums.Source;
+import com.asbg.awsstudymcp.qa.enums.Verification;
+import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.asbg.awsstudymcp.common.ApiException;
 import com.asbg.awsstudymcp.common.CommonErrorCode;
 import com.asbg.awsstudymcp.common.Ulid;
-import com.asbg.awsstudymcp.qa.QaRecord.EmbeddingStatus;
-import com.asbg.awsstudymcp.qa.QaRecord.Rating;
-import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
 
 @Service
 public class QaService {
@@ -40,11 +43,18 @@ public class QaService {
 		String q = requireText(question, "question", MAX_QUESTION_LENGTH);
 		String a = requireText(answer, "answer", MAX_ANSWER_LENGTH);
 
-		QaRecord record = new QaRecord(userId, Ulid.next(), q, a,
-				domain == null ? Domain.UNCLASSIFIED : domain,
-				validateTags(tags), EmbeddingStatus.PENDING, null, Instant.now(clock));
+		List<String> validTags = validateTags(tags);
+
+		QaItem record = QaItem.create(userId, Ulid.next(),
+				domain == null ? Domain.UNCLASSIFIED : domain, Instant.now(clock));
+		record.setQuestion(q);
+		record.setAnswer(a);
+		record.setTags(validTags);
+		// 이 저장 경로는 MCP save_qa뿐이고 출처 URL을 받지 않는다.
+		record.setSource(Source.EXTERNAL_AI);
+		record.setVerification(Verification.UNVERIFIED);
 		repository.save(record);
-		return new SaveResult(record.qaId(), record.embeddingStatus(), record.createdAt());
+		return new SaveResult(record.getQaId(), record.getEmbeddingStatus(), record.getCreatedAt());
 	}
 
 	public RateResult rate(String userId, String qaId, Rating rating) {
@@ -52,7 +62,7 @@ public class QaService {
 		if (rating == null) {
 			throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "rating은 UNDERSTOOD, CONFUSED, WRONG 중 하나여야 합니다.");
 		}
-		repository.updateRating(userId, qaId, rating).orElseThrow(QaService::notFound);
+		repository.updateRating(userId, qaId, rating, Instant.now(clock)).orElseThrow(QaService::notFound);
 		return new RateResult(qaId, rating);
 	}
 
