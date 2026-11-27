@@ -8,6 +8,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import tools.jackson.databind.JsonNode;
 
@@ -18,17 +21,25 @@ public class GeminiGenerationProvider implements GenerationProvider {
     private final String apiKey;
     private final String modelId;
 
+    @Autowired
     public GeminiGenerationProvider(
             @Value("${GEMINI_API_KEY:}") String apiKey,
             @Value("${GEMINI_GENERATION_MODEL:gemini-3.5-flash-lite}") String modelId) {
+        this(createClient(), apiKey, modelId);
+    }
+
+    GeminiGenerationProvider(RestClient client, String apiKey, String modelId) {
+        this.client = client;
         this.apiKey = apiKey;
         this.modelId = modelId;
+    }
 
+    private static RestClient createClient() {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(5_000);
         requestFactory.setReadTimeout(30_000);
 
-        this.client = RestClient.builder()
+        return RestClient.builder()
                 .baseUrl("https://generativelanguage.googleapis.com")
                 .requestFactory(requestFactory)
                 .build();
@@ -48,13 +59,30 @@ public class GeminiGenerationProvider implements GenerationProvider {
                         "parts", List.of(Map.of("text", prompt)))),
                 "generationConfig", Map.of("responseMimeType", "application/json"));
 
-        JsonNode response = client.post()
-                .uri("/v1beta/models/{modelId}:generateContent", modelId)
-                .header("x-goog-api-key", apiKey)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(requestBody)
-                .retrieve()
-                .body(JsonNode.class);
+        JsonNode response;
+        try {
+            response = client.post()
+                    .uri("/v1beta/models/{modelId}:generateContent", modelId)
+                    .header("x-goog-api-key", apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestBody)
+                    .retrieve()
+                    .body(JsonNode.class);
+        } catch (RestClientResponseException error) {
+            if (error.getStatusCode().value() == 429) {
+                throw new GenerationException(
+                        GenerationException.Code.AI_RATE_LIMITED,
+                        "현재 AI 호출 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.");
+            }
+
+            throw new GenerationException(
+                    GenerationException.Code.AI_GENERATION_FAILED,
+                    "현재 AI 답변을 생성할 수 없습니다.");
+        } catch (ResourceAccessException error) {
+            throw new GenerationException(
+                    GenerationException.Code.AI_GENERATION_FAILED,
+                    "현재 AI 서비스에 연결할 수 없습니다.");
+        }
 
         if (response == null) {
             throw new IllegalStateException("Gemini 응답 본문이 비어 있습니다.");
