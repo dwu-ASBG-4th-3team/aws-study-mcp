@@ -5,7 +5,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.asbg.awsstudymcp.idempotency.IdempotencyItem;
+import com.asbg.awsstudymcp.message.MessageItem;
 import com.asbg.awsstudymcp.qa.QaItem;
+import com.asbg.awsstudymcp.session.SessionItem;
 
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
@@ -32,6 +34,16 @@ public class DynamoDbConfig {
 	@Bean
 	DynamoDbTable<QaItem> qaTable(DynamoDbEnhancedClient client, DynamoDbProperties properties) {
 		return client.table(properties.tableName(), TableSchema.fromBean(QaItem.class));
+	}
+
+	@Bean
+	DynamoDbTable<SessionItem> sessionTable(DynamoDbEnhancedClient client, DynamoDbProperties properties) {
+		return client.table(properties.tableName(), TableSchema.fromBean(SessionItem.class));
+	}
+
+	@Bean
+	DynamoDbTable<MessageItem> messageTable(DynamoDbEnhancedClient client, DynamoDbProperties properties) {
+		return client.table(properties.tableName(), TableSchema.fromBean(MessageItem.class));
 	}
 
 	@Bean
