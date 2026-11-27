@@ -17,6 +17,9 @@ class KeysTest {
 		assertThat(Keys.userPk("abc")).isEqualTo("USER#abc");
 		assertThat(Keys.qaSk("01Q")).isEqualTo("QA#01Q");
 		assertThat(Keys.idempotencySk("k1")).isEqualTo("IDEM#k1");
+		assertThat(Keys.sessionSk("01S")).isEqualTo("SESSION#01S");
+		assertThat(Keys.msgSk("01S", "01M")).isEqualTo("MSG#01S#01M");
+		assertThat(Keys.msgPrefix("01S")).isEqualTo("MSG#01S#");
 		assertThat(Keys.gsi1Pk("abc", Domain.TECH)).isEqualTo("USER#abc#DOM#TECH");
 	}
 
@@ -31,6 +34,9 @@ class KeysTest {
 		assertThatThrownBy(() -> Keys.userPk(" ")).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> Keys.qaSk(null)).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> Keys.gsi1Pk("abc", null)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> Keys.sessionSk(" ")).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> Keys.msgSk("01S", null)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> Keys.msgPrefix(null)).isInstanceOf(IllegalArgumentException.class);
 	}
 
 }

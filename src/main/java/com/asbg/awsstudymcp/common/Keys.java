@@ -26,6 +26,19 @@ public final class Keys {
 		return "QA#" + require(qaId, "qaId");
 	}
 
+	public static String sessionSk(String sessionId) {
+		return "SESSION#" + require(sessionId, "sessionId");
+	}
+
+	public static String msgSk(String sessionId, String messageId) {
+		return msgPrefix(sessionId) + require(messageId, "messageId");
+	}
+
+	// 한 세션의 MESSAGE만 조회하는 SK prefix
+	public static String msgPrefix(String sessionId) {
+		return "MSG#" + require(sessionId, "sessionId") + "#";
+	}
+
 	public static String idempotencySk(String key) {
 		return "IDEM#" + require(key, "key");
 	}

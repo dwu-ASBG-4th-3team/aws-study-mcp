@@ -22,7 +22,9 @@ import com.asbg.awsstudymcp.qa.enums.Verification;
 import com.asbg.awsstudymcp.common.Keys;
 import com.asbg.awsstudymcp.common.Ulid;
 import com.asbg.awsstudymcp.idempotency.IdempotencyItem;
+import com.asbg.awsstudymcp.message.MessageItem;
 import com.asbg.awsstudymcp.qa.QaItem;
+import com.asbg.awsstudymcp.session.SessionItem;
 import com.asbg.awsstudymcp.support.LocalDynamoDb;
 
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
@@ -47,6 +49,12 @@ class DynamoDbEntityTest {
 
 	@Autowired
 	DynamoDbTable<IdempotencyItem> idempotencyTable;
+
+	@Autowired
+	DynamoDbTable<SessionItem> sessionTable;
+
+	@Autowired
+	DynamoDbTable<MessageItem> messageTable;
 
 	static DynamoDbClient dynamoDbClient() {
 		return LocalDynamoDb.client();
@@ -161,6 +169,122 @@ class DynamoDbEntityTest {
 		assertThat(loaded).usingRecursiveComparison().isEqualTo(item);
 		assertThat(rawItem(item.getPk(), item.getSk()))
 			.containsOnlyKeys("PK", "SK", "userId", "key", "qaIds", "expiresAt");
+	}
+
+	@Test
+	void savesAndReloadsNewSessionWithoutLastRecordedMessageId() {
+		String userId = Ulid.next();
+		String sessionId = Ulid.next();
+		SessionItem item = SessionItem.create(userId, sessionId, CREATED_AT);
+
+		sessionTable.putItem(item);
+
+		SessionItem loaded = sessionTable.getItem(key(item.getPk(), item.getSk()));
+		assertThat(loaded).usingRecursiveComparison().isEqualTo(item);
+		assertThat(loaded.getLastRecordedMessageId()).isNull();
+
+		Map<String, AttributeValue> raw = rawItem(Keys.userPk(userId), Keys.sessionSk(sessionId));
+		assertThat(raw).containsOnlyKeys("PK", "SK", "sessionId", "userId", "title", "createdAt", "updatedAt");
+		assertThat(raw.get("PK").s()).isEqualTo("USER#" + userId);
+		assertThat(raw.get("SK").s()).isEqualTo("SESSION#" + sessionId);
+		assertThat(raw.get("title").s()).isEqualTo("새로운 대화");
+		assertThat(raw.get("createdAt").s()).isEqualTo("2026-11-24T05:55:00.000Z");
+		assertThat(raw.get("updatedAt").s()).isEqualTo("2026-11-24T05:55:00.000Z");
+	}
+
+	@Test
+	void savesAndReloadsRecordedSession() {
+		SessionItem item = SessionItem.create(Ulid.next(), Ulid.next(), CREATED_AT);
+		item.setTitle("ALB와 NLB");
+		item.setLastRecordedMessageId(Ulid.next());
+		item.setUpdatedAt(CREATED_AT.plusSeconds(1));
+
+		sessionTable.putItem(item);
+
+		SessionItem loaded = sessionTable.getItem(key(item.getPk(), item.getSk()));
+		assertThat(loaded).usingRecursiveComparison().isEqualTo(item);
+		assertThat(rawItem(item.getPk(), item.getSk()).get("lastRecordedMessageId").s())
+			.isEqualTo(item.getLastRecordedMessageId());
+	}
+
+	@Test
+	void savesAndReloadsMessage() {
+		String userId = Ulid.next();
+		String sessionId = Ulid.next();
+		String messageId = Ulid.next();
+		MessageItem item = newMessage(userId, sessionId, messageId);
+		item.setReferenceQaIds(List.of("01QA-B", "01QA-A"));
+		item.setReferenceCount(2);
+
+		messageTable.putItem(item);
+
+		MessageItem loaded = messageTable.getItem(key(item.getPk(), item.getSk()));
+		assertThat(loaded).usingRecursiveComparison().isEqualTo(item);
+
+		Map<String, AttributeValue> raw = rawItem(Keys.userPk(userId), Keys.msgSk(sessionId, messageId));
+		assertThat(raw).containsOnlyKeys("PK", "SK", "messageId", "userId", "sessionId", "question", "answer",
+				"referenceCount", "referenceQaIds", "createdAt");
+		assertThat(raw.get("SK").s()).isEqualTo("MSG#" + sessionId + "#" + messageId);
+		assertThat(raw.get("referenceCount").n()).isEqualTo("2");
+		assertThat(raw.get("referenceQaIds").l()).extracting(AttributeValue::s).containsExactly("01QA-B", "01QA-A");
+		assertThat(raw.get("createdAt").s()).isEqualTo("2026-11-24T05:55:00.000Z");
+	}
+
+	@Test
+	void storesMessageReferenceDefaults() {
+		MessageItem item = newMessage(Ulid.next(), Ulid.next(), Ulid.next());
+
+		messageTable.putItem(item);
+
+		MessageItem loaded = messageTable.getItem(key(item.getPk(), item.getSk()));
+		assertThat(loaded).usingRecursiveComparison().isEqualTo(item);
+
+		Map<String, AttributeValue> raw = rawItem(item.getPk(), item.getSk());
+		assertThat(raw.get("referenceCount").n()).isEqualTo("0");
+		assertThat(raw.get("referenceQaIds").hasL()).isTrue();
+		assertThat(raw.get("referenceQaIds").l()).isEmpty();
+	}
+
+	@Test
+	void queriesMessagesOfOneSessionInMessageIdOrder() {
+		String userId = Ulid.next();
+		String sessionId = Ulid.next();
+		String otherSessionId = Ulid.next();
+		List<String> ids = List.of(Ulid.next(), Ulid.next(), Ulid.next());
+		List<String> otherIds = List.of(Ulid.next(), Ulid.next());
+
+		// 저장 순서가 조회 순서에 영향을 주지 않는지 보기 위해 섞어서 저장한다.
+		messageTable.putItem(newMessage(userId, sessionId, ids.get(2)));
+		messageTable.putItem(newMessage(userId, otherSessionId, otherIds.get(1)));
+		messageTable.putItem(newMessage(userId, sessionId, ids.get(0)));
+		messageTable.putItem(newMessage(userId, otherSessionId, otherIds.get(0)));
+		messageTable.putItem(newMessage(userId, sessionId, ids.get(1)));
+		// 같은 파티션의 다른 Item과 다른 사용자의 같은 sessionId는 조회되지 않아야 한다.
+		sessionTable.putItem(SessionItem.create(userId, sessionId, CREATED_AT));
+		messageTable.putItem(newMessage(Ulid.next(), sessionId, Ulid.next()));
+
+		assertThat(messageIds(userId, sessionId, true)).containsExactlyElementsOf(ids);
+		assertThat(messageIds(userId, sessionId, false)).containsExactly(ids.get(2), ids.get(1), ids.get(0));
+		assertThat(messageIds(userId, otherSessionId, true)).containsExactlyElementsOf(otherIds);
+	}
+
+	private List<String> messageIds(String userId, String sessionId, boolean ascending) {
+		Key prefix = key(Keys.userPk(userId), Keys.msgPrefix(sessionId));
+		return messageTable
+			.query(r -> r.queryConditional(QueryConditional.sortBeginsWith(prefix))
+				.scanIndexForward(ascending)
+				.consistentRead(true))
+			.items()
+			.stream()
+			.map(MessageItem::getMessageId)
+			.toList();
+	}
+
+	private static MessageItem newMessage(String userId, String sessionId, String messageId) {
+		MessageItem item = MessageItem.create(userId, sessionId, messageId, CREATED_AT);
+		item.setQuestion("q");
+		item.setAnswer("a");
+		return item;
 	}
 
 	private static QaItem newQa(String userId, String qaId) {
