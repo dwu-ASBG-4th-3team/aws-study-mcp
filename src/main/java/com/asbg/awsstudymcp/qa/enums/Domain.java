@@ -1,4 +1,4 @@
-package com.asbg.awsstudymcp.qa;
+package com.asbg.awsstudymcp.qa.enums;
 
 public enum Domain {
 

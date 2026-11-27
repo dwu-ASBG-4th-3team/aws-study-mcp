@@ -1,0 +1,51 @@
+package com.asbg.awsstudymcp.common;
+
+import java.time.Instant;
+
+import com.asbg.awsstudymcp.qa.enums.Domain;
+
+
+// DynamoDB 단일 테이블의 키 문자열은 이 클래스에서만 조립한다.
+public final class Keys {
+
+	public static final String PK = "PK";
+	public static final String SK = "SK";
+	public static final String GSI1 = "GSI1";
+	public static final String GSI1PK = "GSI1PK";
+	public static final String GSI1SK = "GSI1SK";
+
+	private Keys() {
+	}
+
+	// sub는 검증된 인증 토큰에서 얻은 값만 넘긴다.
+	public static String userPk(String sub) {
+		return "USER#" + require(sub, "sub");
+	}
+
+	public static String qaSk(String qaId) {
+		return "QA#" + require(qaId, "qaId");
+	}
+
+	public static String idempotencySk(String key) {
+		return "IDEM#" + require(key, "key");
+	}
+
+	public static String gsi1Pk(String sub, Domain domain) {
+		if (domain == null) {
+			throw new IllegalArgumentException("domain is required");
+		}
+		return userPk(sub) + "#DOM#" + domain.name();
+	}
+
+	public static String gsi1Sk(Instant createdAt) {
+		return Timestamps.format(createdAt);
+	}
+
+	private static String require(String value, String name) {
+		if (value == null || value.isBlank()) {
+			throw new IllegalArgumentException(name + " is required");
+		}
+		return value;
+	}
+
+}

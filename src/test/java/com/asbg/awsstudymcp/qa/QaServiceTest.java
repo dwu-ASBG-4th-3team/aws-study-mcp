@@ -7,19 +7,41 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.asbg.awsstudymcp.qa.enums.Domain;
+import com.asbg.awsstudymcp.qa.enums.EmbeddingStatus;
+import com.asbg.awsstudymcp.qa.enums.Rating;
+import com.asbg.awsstudymcp.qa.enums.Source;
+import com.asbg.awsstudymcp.qa.enums.Verification;
+import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import com.asbg.awsstudymcp.common.ApiException;
 import com.asbg.awsstudymcp.common.CommonErrorCode;
-import com.asbg.awsstudymcp.qa.exception.QaErrorCode;
-import com.asbg.awsstudymcp.qa.QaRecord.EmbeddingStatus;
-import com.asbg.awsstudymcp.qa.QaRecord.Rating;
+import com.asbg.awsstudymcp.common.Keys;
+import com.asbg.awsstudymcp.support.LocalDynamoDb;
+
+import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
+import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
+import software.amazon.awssdk.enhanced.dynamodb.Key;
+import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 
 class QaServiceTest {
 
-	private final InMemoryQaRepository repository = new InMemoryQaRepository();
+	private static DynamoDbTable<QaItem> table;
+	private static DynamoDbQaRepository repository;
+
 	private final QaService service = new QaService(repository);
+
+	@BeforeAll
+	static void startDynamoDb() {
+		var client = DynamoDbEnhancedClient.builder().dynamoDbClient(LocalDynamoDb.client()).build();
+		table = client.table("qa-service-test", TableSchema.fromBean(QaItem.class));
+		LocalDynamoDb.createTable(table);
+		repository = new DynamoDbQaRepository(table);
+	}
 
 	@Test
 	void saveStoresRecordAsPending() {
@@ -35,7 +57,7 @@ class QaServiceTest {
 		var saved = service.save("user-a", "q", "a", null, null);
 
 		assertThat(repository.find("user-a", saved.qaId())).get()
-			.extracting(QaRecord::domain)
+			.extracting(QaItem::getDomain)
 			.isEqualTo(Domain.UNCLASSIFIED);
 	}
 
@@ -44,7 +66,7 @@ class QaServiceTest {
 		var saved = service.save("user-a", "q", "a", Domain.SECURITY, List.of("  iam role ", "sts"));
 
 		assertThat(repository.find("user-a", saved.qaId())).get()
-			.extracting(QaRecord::tags)
+			.extracting(QaItem::getTags)
 			.isEqualTo(List.of("iam role", "sts"));
 	}
 
@@ -97,7 +119,7 @@ class QaServiceTest {
 		service.rate("user-a", saved.qaId(), Rating.CONFUSED);
 
 		assertThat(repository.find("user-a", saved.qaId())).get()
-			.extracting(QaRecord::latestRating)
+			.extracting(QaItem::getLatestFeedback)
 			.isEqualTo(Rating.CONFUSED);
 	}
 
@@ -133,6 +155,41 @@ class QaServiceTest {
 		assertThatThrownBy(() -> service.delete("user-a", saved.qaId()))
 			.isInstanceOfSatisfying(ApiException.class,
 					e -> assertThat(e.code()).isEqualTo(QaErrorCode.QA_NOT_FOUND));
+	}
+
+	@Test
+	void saveStoresMcpDefaults() {
+		var saved = service.save("user-a", "q", "a", Domain.TECH, null);
+
+		var record = repository.find("user-a", saved.qaId()).orElseThrow();
+		assertThat(record.getSource()).isEqualTo(Source.EXTERNAL_AI);
+		assertThat(record.getVerification()).isEqualTo(Verification.UNVERIFIED);
+		assertThat(record.getVersion()).isEqualTo(1L);
+		assertThat(record.getCreatedAt()).isEqualTo(saved.createdAt());
+	}
+
+	@Test
+	void deleteRemovesItem() {
+		var saved = service.save("user-a", "q", "a", Domain.TECH, List.of("elb"));
+
+		service.delete("user-a", saved.qaId());
+
+		assertThat(table.getItem(key("user-a", saved.qaId()))).isNull();
+	}
+
+	// 평가가 읽은 직후에 삭제가 끼어든 상황
+	@Test
+	void staleUpdateAfterDeleteDoesNotRecreateItem() {
+		var saved = service.save("user-a", "q", "a", Domain.TECH, null);
+		var stale = repository.find("user-a", saved.qaId()).orElseThrow();
+		service.delete("user-a", saved.qaId());
+
+		assertThatThrownBy(() -> table.updateItem(stale)).isInstanceOf(ConditionalCheckFailedException.class);
+		assertThat(table.getItem(key("user-a", saved.qaId()))).isNull();
+	}
+
+	private static Key key(String userId, String qaId) {
+		return Key.builder().partitionValue(Keys.userPk(userId)).sortValue(Keys.qaSk(qaId)).build();
 	}
 
 }

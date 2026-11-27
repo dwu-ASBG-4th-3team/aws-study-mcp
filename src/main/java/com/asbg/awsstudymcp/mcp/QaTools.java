@@ -7,10 +7,10 @@ import org.springframework.ai.mcp.annotation.McpTool;
 import org.springframework.ai.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
 
+import com.asbg.awsstudymcp.qa.enums.Domain;
+import com.asbg.awsstudymcp.qa.enums.Rating;
 import com.asbg.awsstudymcp.auth.CurrentUserProvider;
 import com.asbg.awsstudymcp.common.ApiException;
-import com.asbg.awsstudymcp.qa.Domain;
-import com.asbg.awsstudymcp.qa.QaRecord.Rating;
 import com.asbg.awsstudymcp.qa.QaService;
 
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;

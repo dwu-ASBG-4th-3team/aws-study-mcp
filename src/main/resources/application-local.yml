@@ -1,3 +1,6 @@
 app:
   auth:
     dev-user-id: local-dev-user
+  dynamodb:
+    table-name: ${DYNAMODB_TABLE_NAME:clf-note-local}
+    region: ${AWS_REGION:ap-northeast-2}
