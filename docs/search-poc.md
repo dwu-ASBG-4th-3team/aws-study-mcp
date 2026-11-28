@@ -30,13 +30,37 @@
 | 3 | 사용자 격리 (`userId` 필터로 user-001 검색 시 user-002 기록 미노출) | ✅ 임의 벡터 | 〃 |
 | 4 | 삭제 후 재검색 시 제외 | ✅ 임의 벡터 | 〃 |
 | 5 | Java `EmbeddingProvider` 컴파일·단위 테스트 | ✅ | `./gradlew build` |
-| 6 | Gemini 실호출 (768차원, 정규화, 유사 질문이 더 가까움) | ⏳ API Key 대기 | `GeminiEmbeddingLiveTest` |
-| 7 | CLF 샘플 질문 실제 임베딩 → S3 Vectors 저장·검색·삭제·격리 재검증 | ⏳ API Key 대기 | `s3v_test.py`의 `fake_vec`을 실제 임베딩으로 교체 |
-| 8 | 평가 질문셋 Recall 측정 | ⏳ API Key 대기 | 3번 `SearchEvaluationTest` |
-| 9 | 없는 key `delete_vectors` 동작 | ⏳ | CloudShell |
+| 6 | Gemini 실호출 (768차원, 정규화, 유사 질문이 더 가까움) | ✅ 2026-11-28 | `scripts/s3v_gemini_poc.py` (CloudShell) |
+| 7 | CLF 샘플 질문 실제 임베딩 → S3 Vectors 저장·검색·삭제·격리 재검증 | ✅ 2026-11-28 | 〃 |
+| 8 | 평가 질문셋 Recall 측정 | ⏳ 노션 질문셋 대기 | 3번 `SearchEvaluationTest` |
+| 9 | 없는 key `delete_vectors` 동작 | ✅ 오류 없이 성공 | 〃 |
 | 10 | ECS → Gemini 외부 통신 | ⏳ ⑦과 확인 | 5번 네트워크 구성 결정 후 |
 
-키를 받으면 6 → 8 → 7 순서로 진행합니다.
+### 2-1. 실제 임베딩 PoC 결과 (2026-11-28, 15/15 PASS)
+
+CloudShell(ap-northeast-2)에서 `python3 scripts/s3v_gemini_poc.py` 실행. 키는 Secrets Manager `clfqa/dev/gemini-api-key`에서 읽음.
+
+| 확인 항목 | 결과 |
+| --- | --- |
+| 출력 차원 | 768 |
+| 정규화 | 길이 1.0000 (모델이 처리, 별도 정규화 불필요 확인) |
+| 비슷한 질문 1위 (메모리 cosine, 4문항) | 4/4 정답 |
+| 정답 유사도 최저 | 0.7591 |
+| 관계없는 질문(요리) 최고 유사도 | 0.4793 |
+| S3 Vectors 검색 1위 | `S3 버킷이랑 EBS 볼륨 차이` → S3·EBS QA (0.855) |
+| 같은 사용자의 다른 CLF 주제 QA | 0.57 ~ 0.67 |
+| 사용자 격리 | USER_A 검색에 USER_B의 비슷한 질문 미노출, USER_B는 본인 기록만 |
+| domain 필터 | SECURITY 지정 시 해당 QA만 |
+| 삭제 후 재검색 | 삭제한 QA 제외 |
+| 없는 key 삭제 | 오류 없이 성공 |
+| 정리 | PoC 벡터(`poc-*`) 모두 삭제 |
+
+**관찰**
+- 관계없는 질문(0.48)과 정답(0.76 이상)은 잘 갈립니다.
+- 하지만 **같은 CLF 안의 다른 주제도 0.57~0.67**로 꽤 높습니다. 최소 유사도로는 "AWS와 상관없는 질문"을 거를 수 있지만, "다른 AWS 주제"까지 거르기는 어렵습니다. 순위로 구분해야 합니다.
+- 샘플 4문항 기준 최소 유사도 후보는 0.5~0.55 정도입니다. 3번 평가 질문셋(36문항)으로 다시 정합니다.
+
+Java 경로의 실호출 확인은 로컬에 키가 있을 때 아래로 합니다.
 
 ```sh
 GEMINI_API_KEY=... ./gradlew test --rerun --tests '*GeminiEmbeddingLiveTest'
@@ -133,7 +157,7 @@ GEMINI_API_KEY=... SEARCH_EVAL_FILE=/path/to/questions.json \
 
 | 항목 | 의존 |
 | --- | --- |
-| 2번 PoC 6~9 실행, 3-4 결과 기록, 최소 유사도 결정 | API Key (②) |
+| 3번 평가 질문셋 실행, 3-4 결과 기록, 최소 유사도 결정 | 노션 질문셋 |
 | Gemini 등급·실제 한도 확인, 사용자별 검색 제한 결정 | ② |
 | NAT Gateway 대신 쓸 네트워크 구성 결정 | ⑦ |
 | S3 Vectors 클라이언트·`SearchService` 구현, MCP·REST 연결 | #13·#14 머지 후 |
