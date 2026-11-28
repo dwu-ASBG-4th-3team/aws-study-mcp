@@ -23,7 +23,6 @@ env:
   ECR_REPOSITORY: clfqa-dev-mcp
   ECS_CLUSTER: clfqa-dev-cluster
   ECS_SERVICE: clfqa-dev-mcp
-  TASK_FAMILY: clfqa-dev-mcp
   CONTAINER_NAME: mcp
 
 jobs:
@@ -59,10 +58,13 @@ jobs:
           docker push "$IMAGE"
           echo "uri=$IMAGE" >> "$GITHUB_OUTPUT"
 
-      # 환경변수·시크릿은 콘솔에서 관리하므로 현재 태스크 정의를 가져와 이미지만 바꾼다
+      # 환경변수·시크릿은 콘솔에서 관리하므로 서비스가 지금 쓰는 태스크 정의를 가져와 이미지만 바꾼다
+      # (최신 리비전이 아니라 서비스 리비전 기준이라, 등록만 해 둔 설정 변경이 함께 배포되지 않는다)
       - name: Download current task definition
         run: |
-          aws ecs describe-task-definition --task-definition "$TASK_FAMILY" \
+          CURRENT=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$CURRENT" \
             --query taskDefinition > task-definition.json
 
       - id: render
