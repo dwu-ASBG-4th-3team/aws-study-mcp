@@ -86,7 +86,7 @@ S3 Vectors에는 메타데이터만 바꾸는 API가 없어서 기존 벡터 값
 ## 5. INT-003 `DELETE` (delete_qa)
 
 1. DynamoDB `GetItem`. **있으면** 종료 (삭제 이벤트가 잘못 왔거나 같은 qaId가 다시 생긴 경우, 지우지 않음)
-2. `DeleteVectors(keys=[qaId])`. 없는 키를 지워도 성공으로 봅니다 (⚠️ PoC에서 확인)
+2. `DeleteVectors(keys=[qaId])`. 없는 키를 지워도 오류 없이 성공합니다 (2026-11-28 PoC에서 확인). 그래서 중복 삭제도 안전합니다.
 
 ③ 발행 쪽: 발행이 실패해도 `delete_qa`는 성공으로 응답합니다. 벡터가 남아도 검색 단계에서 DynamoDB 재조회로 걸러지므로 사용자에게 보이지 않고, 7-3번 정리 작업이 지웁니다.
 
@@ -188,4 +188,3 @@ G0에서 인덱싱 없이 저장된 QA, 그리고 모델·차원을 바꿀 때 �
 | 재처리 대상 조회 | 우선 Scan, 커지면 sparse GSI | ③ |
 | 이벤트 발행 방식 | 지금은 앱에서 SQS 직접 발행. 대안: DynamoDB Streams → Lambda (발행 누락이 없고 항목별 순서 보장, 대신 앱 밖에서 변경을 판단) | ①, ③ |
 | Lambda 코드 위치·언어 | 서버와 같은 Java(임베딩 코드 재사용) 또는 Python | ① |
-| 없는 key `DeleteVectors` 동작 | 성공으로 가정, PoC에서 확인 | ④ |
