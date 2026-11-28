@@ -1,8 +1,6 @@
 package com.asbg.awsstudymcp.qa;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,7 +29,6 @@ import org.springframework.web.context.WebApplicationContext;
 
 import com.asbg.awsstudymcp.auth.CurrentUserProvider;
 import com.asbg.awsstudymcp.common.Ulid;
-import com.asbg.awsstudymcp.qa.dto.res.SimilarQuestion;
 import com.asbg.awsstudymcp.qa.enums.Domain;
 import com.asbg.awsstudymcp.qa.enums.Source;
 import com.asbg.awsstudymcp.qa.enums.Verification;
@@ -42,7 +39,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-// HTTP 요청부터 DynamoDB Local까지 확인한다. 사용자와 검색만 바꿔 끼운다.
+// HTTP 요청부터 DynamoDB Local까지 확인한다. 사용자만 바꿔 끼운다.
 @SpringBootTest(properties = "app.dynamodb.table-name=qa-api-test")
 @ActiveProfiles("local")
 class QaApiTest {
@@ -52,9 +49,6 @@ class QaApiTest {
 
 	@MockitoBean
 	CurrentUserProvider currentUser;
-
-	@MockitoBean
-	SimilarQuestionFinder similarQuestionFinder;
 
 	@Autowired
 	DynamoDbTable<QaItem> table;
@@ -133,54 +127,13 @@ class QaApiTest {
 		assertSuccess(body);
 		JsonNode result = body.get("result");
 		assertThat(result.propertyNames()).containsExactlyInAnyOrder("qaId", "question", "answer", "domain", "tags",
-				"source", "verification", "sourceUrl", "embeddingStatus", "latestFeedback", "createdAt", "updatedAt",
-				"similarQuestions");
+				"source", "verification", "sourceUrl", "embeddingStatus", "latestFeedback", "createdAt", "updatedAt");
 		assertThat(result.get("sourceUrl").isNull()).isTrue();
 		assertThat(result.get("latestFeedback").isNull()).isTrue();
 		assertThat(result.get("source").asString()).isEqualTo("EXTERNAL_AI");
 		assertThat(result.get("verification").asString()).isEqualTo("UNVERIFIED");
 		assertThat(result.get("tags").get(0).asString()).isEqualTo("iam");
 		assertThat(result.get("updatedAt").asString()).isEqualTo("2026-11-27T07:12:30.000Z");
-		assertThat(result.get("similarQuestions")).isEmpty();
-	}
-
-	@Test
-	void similarQuestionsKeepOrderExcludeSelfAndStopAtThree() throws Exception {
-		String qaId = put("q");
-		when(similarQuestionFinder.find(userId, "q")).thenReturn(List.of(new SimilarQuestion("s1", "one"),
-				new SimilarQuestion(qaId, "q"), new SimilarQuestion("s2", "two"),
-				new SimilarQuestion("s3", "three"), new SimilarQuestion("s4", "four")));
-
-		JsonNode similar = call(get("/api/qa/{qaId}", qaId), 200).get("result").get("similarQuestions");
-
-		List<String> ids = new ArrayList<>();
-		similar.forEach(node -> {
-			assertThat(node.propertyNames()).containsExactlyInAnyOrder("qaId", "question");
-			ids.add(node.get("qaId").asString());
-		});
-		assertThat(ids).containsExactly("s1", "s2", "s3");
-	}
-
-	@Test
-	void detailSucceedsWhenSearchFails() throws Exception {
-		String qaId = put("q");
-		when(similarQuestionFinder.find(any(), any())).thenThrow(new IllegalStateException("search down"));
-
-		JsonNode body = call(get("/api/qa/{qaId}", qaId), 200);
-
-		assertSuccess(body);
-		assertThat(body.get("result").get("similarQuestions")).isEmpty();
-	}
-
-	// 1,000자로 자르는 것은 검색 연결 구현의 몫이라, 여기서는 원문이 그대로 전달되는지만 본다.
-	@Test
-	void detailHandlesLongQuestion() throws Exception {
-		String question = "가".repeat(QaService.MAX_QUESTION_LENGTH);
-		String qaId = put(question);
-
-		call(get("/api/qa/{qaId}", qaId), 200);
-
-		verify(similarQuestionFinder).find(userId, question);
 	}
 
 	@Test

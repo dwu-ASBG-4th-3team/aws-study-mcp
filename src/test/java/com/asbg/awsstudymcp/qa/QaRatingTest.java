@@ -189,7 +189,7 @@ class QaRatingTest {
 	}
 
 	private static QaService service(DynamoDbClient client, Instant now) {
-		return new QaService(new DynamoDbQaRepository(enhanced, client, table), (userId, question) -> List.of(),
+		return new QaService(new DynamoDbQaRepository(enhanced, client, table),
 				Clock.fixed(now, ZoneOffset.UTC));
 	}
 

@@ -33,7 +33,7 @@ class QaServiceTest {
 	private static DynamoDbTable<QaItem> table;
 	private static DynamoDbQaRepository repository;
 
-	private final QaService service = new QaService(repository, (userId, question) -> List.of());
+	private final QaService service = new QaService(repository);
 
 	@BeforeAll
 	static void startDynamoDb() {

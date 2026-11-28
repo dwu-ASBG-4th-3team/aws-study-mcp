@@ -40,7 +40,7 @@ class QaListTest {
 		var client = DynamoDbEnhancedClient.builder().dynamoDbClient(dynamoDb).build();
 		table = client.table("qa-list-test", TableSchema.fromBean(QaItem.class));
 		LocalDynamoDb.createTable(table);
-		service = new QaService(new DynamoDbQaRepository(client, dynamoDb, table), (userId, question) -> List.of());
+		service = new QaService(new DynamoDbQaRepository(client, dynamoDb, table));
 	}
 
 	@Test

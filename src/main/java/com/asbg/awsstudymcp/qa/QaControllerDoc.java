@@ -22,7 +22,7 @@ public interface QaControllerDoc {
 			@Parameter(description = "1~50, 기본 20") Integer limit,
 			@Parameter(description = "이전 응답의 nextCursor. 같은 domain 조건에서만 사용") String cursor);
 
-	@Operation(summary = "상세 조회", description = "similarQuestions는 검색 연결 전까지 빈 목록")
+	@Operation(summary = "상세 조회")
 	BaseResponse<QaDetailRes> get(String qaId);
 
 	@Operation(summary = "이해도 평가")

@@ -27,7 +27,7 @@ class QaToolsTest {
 
 	private final QaRepository repository = mock(QaRepository.class);
 	private final QaTools tools = new QaTools(
-			new QaService(repository, (userId, question) -> List.of()), () -> "user-a", JsonMapper.builder().build());
+			new QaService(repository), () -> "user-a", JsonMapper.builder().build());
 
 	@Test
 	void awsErrorDetailIsNotExposed() {
