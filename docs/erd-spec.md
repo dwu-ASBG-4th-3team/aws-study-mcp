@@ -166,6 +166,10 @@ QA는 세션 대화와 분리된 학습 기록이며, `sessionId`는 기록이 �
 | 참고 기록 수 | `referenceCount` | Number | 필수, 기본값 0 | 답변 생성 시 참고한 과거 학습 기록 개수. 생성 당시 기준 |
 | 최신 피드백 | `latestFeedback` | String | 선택 | 가장 최근 이해도 평가 |
 | 임베딩 상태 | `embeddingStatus` | String | 필수 | 기본값 `PENDING` |
+| 임베딩 모델 | `embeddingModel` | String | 선택 | 인덱싱에 사용한 모델 ID (예: `gemini-embedding-2`). 인덱싱 완료 시 기록 |
+| 인덱싱 일시 | `indexedAt` | String | 선택 | 벡터 저장 완료 시각. UTC, ISO 8601 |
+| 임베딩 시도 횟수 | `embeddingAttempts` | Number | 선택 | 재처리 시 1 증가. 5회 초과 실패 시 자동 재처리 중단 |
+| 임베딩 오류 | `embeddingError` | String | 선택 | 마지막 실패의 오류 코드만 저장(메시지 본문·원문 미저장) |
 | 버전 | `version` | Number | 필수 | 낙관적 락 및 이벤트 순서 관리. 최초 저장 시 1, 수정할 때마다 1 증가 |
 | 생성 일시 | `createdAt` | String | 필수 | UTC, ISO 8601 |
 | 수정 일시 | `updatedAt` | String | 필수 | UTC, ISO 8601 |
@@ -195,6 +199,7 @@ QA는 세션 대화와 분리된 학습 기록이며, `sessionId`는 기록이 �
 - 대표 태그는 소문자 변환 및 공백 정규화 후 저장한다.
 - 최초 저장 시 `embeddingStatus`는 `PENDING`으로 설정한다.
 - G1 인덱싱 기능 도입 후 기존 활성 QA 중 `PENDING` 항목을 일괄 인덱싱한다.
+- 백필 대상은 `embeddingStatus != COMPLETED` 또는 `embeddingModel != 현재 모델`인 QA다. 임베딩 모델을 바꿀 때는 새 벡터 인덱스에 백필한다.
 - 최신 피드백은 QA에 덮어쓰고, 변경 이력은 FEEDBACK_HISTORY에 저장한다.
 - `USER` 출처 또는 출처 URL의 호스트가 `docs.aws.amazon.com`인 경우 기존 정책에 따라 `VERIFIED`로 분류한다.
 - 그 외에는 `UNVERIFIED`로 분류한다.
@@ -287,7 +292,9 @@ QA는 세션 대화와 분리된 학습 기록이며, `sessionId`는 기록이 �
 - G0에서는 QA를 `PENDING` 상태로 저장한다.
 - G1부터 QA 저장 성공 이후 SQS를 통해 인덱싱 요청을 발행한다.
 - MESSAGE는 벡터 인덱싱 대상이 아니다.
-- 인덱싱 메시지에는 사용자 ID, Q&A ID, `version`, 이벤트 유형 등 인덱싱에 필요한 식별 정보를 포함한다.
+- 인덱싱 메시지에는 사용자 ID, Q&A ID, 이벤트 유형 등 인덱싱에 필요한 식별 정보를 포함한다. 질문·답변 원문은 포함하지 않는다.
+- 이벤트 유형은 `UPSERT`(저장·본문 수정), `UPDATE_META`(피드백·도메인 등 메타데이터 변경), `DELETE`(삭제)로 구분한다.
+- Lambda는 임베딩 관련 속성(`embeddingStatus`, `embeddingModel`, `indexedAt`, `embeddingAttempts`, `embeddingError`)만 `UpdateItem`으로 갱신하며, 조건 `attribute_exists(PK)`를 적용한다. 항목 전체를 다시 저장하지 않고 `version`도 증가시키지 않는다.
 - Lambda는 DynamoDB에서 대상 QA의 존재 여부, 원문 및 현재 버전을 확인한 후 임베딩을 생성한다.
 - 벡터 저장 성공 이후 유효한 QA의 `embeddingStatus`를 `COMPLETED`로 갱신한다.
 - 일시적 인덱싱 실패는 재시도 정책에 따라 처리한다.
@@ -578,11 +585,14 @@ G1 이후 비동기 임베딩 및 벡터 인덱싱 작업이 수행되는 과정
 | `userId` | 사용자별 데이터 접근 범위 식별 |
 | `version` | 데이터 변경 및 오래된 인덱싱 이벤트 검증 |
 | `embeddingStatus` | 벡터 인덱싱 처리 상태 관리 |
+| `embeddingModel`, `indexedAt` | 인덱싱 완료 모델·시각 기록, 모델 변경 시 백필 대상 판별 |
+| `embeddingAttempts`, `embeddingError` | 실패 재처리 횟수 제한 및 실패 원인 기록 |
 
 **처리 기준**
 
-- SQS 인덱싱 메시지에는 `userId`, `qaId`, `version` 및 이벤트 유형을 포함한다.
-- Lambda는 INDEX 메시지를 처리하기 전 DynamoDB에서 대상 QA의 현재 상태를 조회한다.
+- SQS 인덱싱 메시지에는 `userId`, `qaId` 및 이벤트 유형(`UPSERT`·`UPDATE_META`·`DELETE`)을 포함한다.
+- ⚠️ 논의 필요: 메시지에 `version`을 넣어 오래된 이벤트를 건너뛸지, `version` 없이 Lambda가 항상 DynamoDB 최신 상태를 다시 읽어 벡터를 맞출지(indexing.md 방식) 확정이 필요하다. 아래 `version` 관련 항목은 확정 전까지 기존 기준으로 둔다.
+- Lambda는 `UPSERT`·`UPDATE_META` 메시지를 처리하기 전 DynamoDB에서 대상 QA의 현재 상태를 조회한다.
 - 대상 QA가 존재하지 않는 경우 임베딩 생성 및 벡터 저장을 수행하지 않는다.
 - 메시지의 버전이 현재 QA 버전과 일치하지 않는 경우 오래된 인덱싱 요청으로 처리한다.
 - 임베딩 생성 이후 벡터 저장 전 QA의 존재 여부 및 버전을 다시 확인한다.
@@ -590,7 +600,7 @@ G1 이후 비동기 임베딩 및 벡터 인덱싱 작업이 수행되는 과정
 - 벡터 저장 과정에서 QA가 삭제되거나 버전이 변경된 경우 해당 작업의 벡터를 유효한 검색 데이터로 처리하지 않는다.
 - 벡터 저장 직후 QA 상태를 재검증하고, 이미 삭제된 QA의 벡터가 생성된 경우 해당 벡터를 제거한다.
 - DELETE 메시지 처리 시 메시지의 사용자 ID 범위에서 QA 항목이 없는 것을 확인한 후 해당 벡터를 삭제한다.
-- 동일한 INDEX·DELETE 메시지가 중복 수신되어도 데이터 정합성이 유지되어야 한다.
+- 동일한 `UPSERT`·`UPDATE_META`·`DELETE` 메시지가 중복 수신되어도 데이터 정합성이 유지되어야 한다.
 - S3 Vectors의 벡터 키는 `qaId`를 사용하며, 같은 키로 재저장하면 덮어쓴다.
 - 벡터 삭제 실패 시 재시도 및 실패 복구 정책에 따라 처리한다.
 - DLQ 메시지 재처리 시에도 대상 QA의 현재 존재 여부와 버전을 확인한다(DELETE 메시지는 존재 여부만 확인).
