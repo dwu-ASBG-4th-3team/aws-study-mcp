@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import com.asbg.awsstudymcp.study.GenerationException;
+
 import software.amazon.awssdk.core.exception.SdkException;
 
 // 모든 오류를 BaseResponse로 바꾼다. 예외 원문은 응답에 넣지 않는다.
@@ -23,6 +25,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 	public ResponseEntity<Object> handleApi(ApiException e) {
 		return response(HttpStatusCode.valueOf(e.code().httpStatus()), new HttpHeaders(), e.code().code(),
 				e.getMessage());
+	}
+
+	@ExceptionHandler(GenerationException.class)
+	public ResponseEntity<Object> handleGeneration(GenerationException e) {
+		CommonErrorCode code = switch (e.getCode()) {
+			case AI_RATE_LIMITED -> CommonErrorCode.RATE_LIMITED;
+			case AI_GENERATION_FAILED -> CommonErrorCode.INTERNAL_ERROR;
+		};
+		return response(HttpStatusCode.valueOf(code.httpStatus()), new HttpHeaders(), code.code(), code.message());
 	}
 
 	// AWS 오류 원문에는 계정 ID, 테이블 이름 등이 들어가므로 로그에만 남긴다.

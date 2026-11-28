@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.asbg.awsstudymcp.study.GenerationException;
+
 import software.amazon.awssdk.services.dynamodb.model.ResourceNotFoundException;
 
 class GlobalExceptionHandlerTest {
@@ -38,6 +40,12 @@ class GlobalExceptionHandlerTest {
 		assertError("limited", 429, "COMMON_429", "요청 한도를 초과했습니다.");
 	}
 
+	@Test
+	void generationErrorsUseCommonStatusWithoutExposingDetails() throws Exception {
+		assertError("ai-limited", 429, "COMMON_429", CommonErrorCode.RATE_LIMITED.message());
+		assertError("ai-failed", 500, "COMMON_500", CommonErrorCode.INTERNAL_ERROR.message());
+	}
+
 	private void assertError(String path, int status, String code, String message) throws Exception {
 		mvc.perform(get("/fail/{kind}", path))
 			.andExpect(status().is(status))
@@ -57,6 +65,8 @@ class GlobalExceptionHandlerTest {
 				case "forbidden" -> new ApiException(CommonErrorCode.FORBIDDEN);
 				case "conflict" -> new ApiException(CommonErrorCode.CONFLICT);
 				case "limited" -> new ApiException(CommonErrorCode.RATE_LIMITED);
+				case "ai-limited" -> new GenerationException(GenerationException.Code.AI_RATE_LIMITED, "provider detail");
+				case "ai-failed" -> new GenerationException(GenerationException.Code.AI_GENERATION_FAILED, "provider detail");
 				default -> new IllegalStateException("secret detail");
 			};
 		}
