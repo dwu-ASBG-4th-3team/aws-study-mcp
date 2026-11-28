@@ -24,6 +24,8 @@ app:
       api-key: ${GEMINI_API_KEY:}
       model: ${GEMINI_EMBEDDING_MODEL:gemini-embedding-2}
       dimension: ${GEMINI_EMBEDDING_DIM:768}
+      # 호출 한 번 전체의 제한시간 (예: 10s)
+      timeout: ${GEMINI_EMBEDDING_TIMEOUT:10s}
 
 server:
   port: ${PORT:8080}

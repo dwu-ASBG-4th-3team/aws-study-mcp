@@ -9,7 +9,7 @@
 | 모델 | `gemini-embedding-2` | `GEMINI_EMBEDDING_MODEL` |
 | 출력 차원 | 768 (S3 Vectors 인덱스 `qa-index-gemini-v1`과 같아야 함) | `GEMINI_EMBEDDING_DIM` |
 | API Key | Secrets Manager에서 태스크 환경변수로 주입 | `GEMINI_API_KEY` |
-| 제한시간 | 호출 전체 10초 (시간 초과는 재시도 가능 오류) | `app.gemini.embedding.timeout` |
+| 제한시간 | 호출 전체 10초. 시간이 지나면 HTTP 요청을 끊고 재시도 가능 오류로 끝남 | `GEMINI_EMBEDDING_TIMEOUT` (예: `10s`) |
 | 거리 | cosine (정규화는 모델이 처리) | - |
 
 `GEMINI_API_KEY`가 비어 있으면 `EmbeddingProvider` 빈을 만들지 않습니다. 키 없이도 로컬 실행과 CI는 동작합니다.
