@@ -146,15 +146,17 @@ S3 Vectors에는 메타데이터만 바꾸는 API가 없어서 기존 벡터 값
 
 발행 실패 등으로 남은 벡터를 지웁니다. `ListVectors`로 전체 key를 읽고 DynamoDB에 없는 `qaId`는 `DeleteVectors`. 재처리 Lambda에 같이 넣습니다.
 
-### 7-4. ③에 요청하는 DynamoDB 처리
+### 7-4. 임베딩 필드와 DynamoDB 쓰기 방식
+
+추가 필드는 인덱싱 Lambda만 읽고 쓰므로 ④가 Lambda를 만들 때 추가합니다. ③은 아래 "③ 확인 사항"만 지키면 됩니다.
 
 | 요청 | 내용 |
 | --- | --- |
-| 추가 필드 | `embeddingModel`(string), `indexedAt`(timestamp), `embeddingAttempts`(number), `embeddingError`(string, 오류 코드만) |
+| 추가 필드 (④) | `embeddingModel`(string), `indexedAt`(timestamp), `embeddingAttempts`(number), `embeddingError`(string, 오류 코드만) |
 | 필드 제외 | 인수인계 초안의 `vectorKey`는 `qaId`와 같아서 두지 않음 |
 | 상태값 | 기존 `EmbeddingStatus`(`PENDING`·`PROCESSING`·`COMPLETED`·`FAILED`) 그대로 사용. 완전 삭제라 `DELETED`는 필요 없음 |
 | Lambda의 쓰기 방식 | 임베딩 필드만 `UpdateItem`(`SET embeddingStatus = ...`) + 조건 `attribute_exists(PK)`. 전체 항목을 다시 저장하지 않음 → 삭제된 QA가 되살아나거나 `latestFeedback`을 덮어쓰지 않음. `version`은 올리지 않음 (사용자 쓰기의 낙관적 락과 충돌 방지) |
-| 질문·답변 수정 | 지금은 수정 기능이 없어 원문이 바뀌지 않는다고 가정합니다. ⚠️ 수정 기능이 생기면 수정 시 `UPSERT` 재발행 |
+| ③ 확인 사항 | QA 본문 수정 API는 없고(③ 확인), 이해도 평가는 `UpdateItem`으로 필요한 필드만 바꾸므로 Lambda가 쓴 필드를 덮어쓰지 않습니다. 이해도 평가가 바뀌면 `UPDATE_META`를 발행합니다. ⚠️ 본문 수정 기능이 생기면 `putItem` 전체 저장 대신 `UpdateItem`을 쓰고 `UPSERT`를 재발행 |
 
 ## 8. 기존 QA 일괄 인덱싱 (백필)
 
@@ -184,7 +186,6 @@ G0에서 인덱싱 없이 저장된 QA, 그리고 모델·차원을 바꿀 때 �
 | 항목 | 제안 | 상대 |
 | --- | --- | --- |
 | 발행 실패 시 `save_qa`·`delete_qa` 응답 | 성공으로 응답하고 재처리에 맡김 | ③ |
-| 7-4 추가 필드와 Lambda 쓰기 방식 | 위 표대로 | ③ |
 | 재처리 대상 조회 | 우선 Scan, 커지면 sparse GSI | ③ |
 | 이벤트 발행 방식 | 지금은 앱에서 SQS 직접 발행. 대안: DynamoDB Streams → Lambda (발행 누락이 없고 항목별 순서 보장, 대신 앱 밖에서 변경을 판단) | ①, ③ |
 | Lambda 코드 위치·언어 | 서버와 같은 Java(임베딩 코드 재사용) 또는 Python | ① |
