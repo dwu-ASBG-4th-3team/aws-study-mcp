@@ -57,7 +57,10 @@ public class QaTools {
 	public CallToolResult rateAnswer(
 			@McpToolParam(description = "save_qa가 돌려준 qaId") String qaId,
 			@McpToolParam(description = "UNDERSTOOD, CONFUSED, WRONG 중 하나") Rating rating) {
-		return call(() -> qaService.rate(currentUser.currentUserId(), qaId, rating));
+		return call(() -> {
+			var rated = qaService.rate(currentUser.currentUserId(), qaId, rating);
+			return new RateAnswerResult(rated.qaId(), rated.latestFeedback());
+		});
 	}
 
 	@McpTool(name = "delete_qa", description = "사용자 본인의 Q&A 기록을 삭제한다. 삭제 전에 사용자에게 확인을 받는다.")
@@ -82,6 +85,9 @@ public class QaTools {
 
 	private static CallToolResult error(ApiException e) {
 		return CallToolResult.builder().isError(true).addTextContent(e.toToolMessage()).build();
+	}
+
+	record RateAnswerResult(String qaId, Rating rating) {
 	}
 
 }
