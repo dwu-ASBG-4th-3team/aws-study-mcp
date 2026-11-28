@@ -1,0 +1,82 @@
+name: CD
+
+# dev에 머지되어 CI가 성공하면 ECR에 이미지를 올리고 ECS 서비스를 갱신한다.
+# 저장소 변수 CD_ENABLED=true 일 때만 배포한다.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC로 AWS 역할을 받기 위해 필요
+
+# 배포는 한 번에 하나씩, 진행 중인 배포는 취소하지 않는다
+concurrency:
+  group: cd-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: clfqa-dev-mcp
+  ECS_CLUSTER: clfqa-dev-cluster
+  ECS_SERVICE: clfqa-dev-mcp
+  TASK_FAMILY: clfqa-dev-mcp
+  CONTAINER_NAME: mcp
+
+jobs:
+  deploy:
+    if: >-
+      vars.CD_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # workflow_run이면 CI가 검증한 커밋을 그대로 배포한다
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: image
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "uri=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      # 환경변수·시크릿은 콘솔에서 관리하므로 현재 태스크 정의를 가져와 이미지만 바꾼다
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition --task-definition "$TASK_FAMILY" \
+            --query taskDefinition > task-definition.json
+
+      - id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.image.outputs.uri }}
+
+      # 새 태스크가 정상화될 때까지 기다린다. 실패하면 서킷 브레이커가 이전 버전으로 롤백한다.
+      - uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE }}
+          wait-for-service-stability: true
+          wait-for-minutes: 20
