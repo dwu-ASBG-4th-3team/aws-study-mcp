@@ -14,6 +14,10 @@ spring:
           save_qa로 기록할지 물어보세요. 기록한 Q&A의 이해도는 rate_answer로 남깁니다.
 
 app:
+  auth:
+    cognito:
+      issuer-uri: ${COGNITO_ISSUER_URI:}
+      client-id: ${COGNITO_CLIENT_ID:}
   dynamodb:
     # 값이 없으면 기동에 실패한다.
     table-name: ${DYNAMODB_TABLE_NAME:}
